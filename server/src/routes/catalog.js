@@ -195,6 +195,22 @@ router.get('/products/:slug', async (req, res) => {
   });
 });
 
+/** Entrega imagens guardadas no banco (cache longo: o conteúdo de um id nunca muda). */
+router.get('/media/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  const m = Number.isInteger(id) ? await one('SELECT mime, data FROM media WHERE id = $1', [id]) : null;
+  if (!m) throw notFound('Imagem não encontrada.');
+  const buf = Buffer.isBuffer(m.data) ? m.data : Buffer.from(String(m.data).slice(2), 'hex');
+  res.set({
+    'Content-Type': m.mime,
+    'Content-Length': String(buf.length),
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    // impede que um SVG execute scripts se for aberto diretamente
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+  });
+  res.send(buf);
+});
+
 router.post('/newsletter', async (req, res) => {
   const { email } = parse(z.object({ email: z.string().trim().toLowerCase().email('Informe um e-mail válido') }), req.body);
   const r = await query('INSERT INTO newsletter_subscribers (email) VALUES ($1) ON CONFLICT (email) DO NOTHING', [email]);

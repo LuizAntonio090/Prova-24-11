@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": "client/dist",
+  "functions": {
+    "api/index.js": { "maxDuration": 30, "includeFiles": "server/src/db/migrations/**" }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!assets/|favicon).*)", "destination": "/index.html" }
+  ]
+}

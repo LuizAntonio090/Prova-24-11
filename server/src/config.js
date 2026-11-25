@@ -15,8 +15,11 @@ for (const file of [path.join(PROJECT_ROOT, '.env'), path.join(SERVER_ROOT, '.en
 }
 
 const env = process.env;
-const isProd = env.NODE_ENV === 'production';
+// Na Vercel (produção e prévias) o app sempre roda em modo produção
+const isProd = env.NODE_ENV === 'production' || Boolean(env.VERCEL);
 const port = Number(env.PORT || 3333);
+// Na Vercel, usa o domínio de produção do projeto quando APP_URL não foi definido
+const vercelUrl = env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : '';
 
 export const config = {
   env: env.NODE_ENV || 'development',
@@ -25,9 +28,9 @@ export const config = {
   databaseUrl: env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/loja',
   databaseSsl: env.DATABASE_SSL === 'true',
   // URL pública do front-end (usada nos links de e-mail e retorno do pagamento)
-  appUrl: (env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  appUrl: (env.APP_URL || vercelUrl || 'http://localhost:5173').replace(/\/$/, ''),
   // URL pública da API (usada como notification_url do gateway). Precisa ser HTTPS em produção.
-  publicApiUrl: (env.PUBLIC_API_URL || `http://localhost:${port}`).replace(/\/$/, ''),
+  publicApiUrl: (env.PUBLIC_API_URL || vercelUrl || `http://localhost:${port}`).replace(/\/$/, ''),
   trustProxy: env.TRUST_PROXY === 'true',
   session: {
     cookieName: env.SESSION_COOKIE_NAME || 'loja_sid',

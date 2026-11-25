@@ -3,17 +3,24 @@
   "version": "1.0.0",
   "private": true,
   "description": "E-commerce de roupas: React + Vite + Tailwind, Node.js + Express, PostgreSQL",
-  "workspaces": ["server", "client"],
+  "workspaces": [
+    "server",
+    "client"
+  ],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
     "start": "npm run start -w server",
     "db:migrate": "npm run migrate -w server",
     "db:seed": "npm run seed -w server",
-    "db:reset": "npm run db:reset -w server"
+    "db:reset": "npm run db:reset -w server",
+    "vercel-build": "npm run build -w client && npm run seed -w server"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
   },
-  "engines": { "node": ">=20.12" }
+  "engines": {
+    "node": ">=20.12"
+  },
+  "type": "module"
 }

@@ -1,11 +1,7 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import express from 'express';
 import { z } from 'zod';
-import { config } from '../../config.js';
 import { many, one, query, transaction } from '../../db/pool.js';
 import { HttpError, notFound, parse, slugify, toInt } from '../../lib/http.js';
-import { randomToken } from '../../lib/security.js';
 import { sortSizes } from '../../services/catalog.js';
 
 const router = express.Router();
@@ -190,23 +186,20 @@ router.delete('/products/:id', async (req, res) => {
 
 // ---------- Upload de imagens (JSON base64, sem dependências) ----------
 const SIGNATURES = [
-  { ext: 'jpg', test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  { ext: 'png', test: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
-  { ext: 'webp', test: (b) => b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP' },
+  { mime: 'image/jpeg', test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { mime: 'image/png', test: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  { mime: 'image/webp', test: (b) => b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP' },
 ];
 
-router.post('/uploads', express.json({ limit: '8mb' }), async (req, res) => {
+router.post('/uploads', express.json({ limit: '4.5mb' }), async (req, res) => {
   const { data } = parse(z.object({ data: z.string().min(20) }), req.body);
   const b64 = data.includes(',') ? data.split(',')[1] : data;
   const buf = Buffer.from(b64, 'base64');
-  if (buf.length > 5 * 1024 * 1024) throw new HttpError(413, 'A imagem deve ter no máximo 5 MB.');
+  if (buf.length > 3 * 1024 * 1024) throw new HttpError(413, 'A imagem deve ter no máximo 3 MB.');
   const sig = SIGNATURES.find((s) => s.test(buf));
   if (!sig) throw new HttpError(422, 'Envie uma imagem JPG, PNG ou WEBP.');
-  const dir = path.join(config.uploadDir, 'products');
-  await fs.mkdir(dir, { recursive: true });
-  const name = `${Date.now()}-${randomToken(8)}.${sig.ext}`;
-  await fs.writeFile(path.join(dir, name), buf);
-  res.status(201).json({ url: `/uploads/products/${name}` });
+  const row = await one('INSERT INTO media (mime, data, size) VALUES ($1, $2, $3) RETURNING id', [sig.mime, buf, buf.length]);
+  res.status(201).json({ url: `/api/media/${row.id}` });
 });
 
 // ---------- Estoque ----------

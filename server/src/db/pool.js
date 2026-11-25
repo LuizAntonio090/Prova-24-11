@@ -5,7 +5,7 @@ const { Pool } = pg;
 
 export const pool = new Pool({
   connectionString: config.databaseUrl,
-  max: 10,
+  max: process.env.VERCEL ? 3 : 10,
   ssl: config.databaseSsl ? { rejectUnauthorized: false } : undefined,
 });
 

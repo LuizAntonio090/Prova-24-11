@@ -194,7 +194,7 @@ export function ProductForm({ id }) {
               <Button variant="secondary" size="sm" loading={uploading} onClick={() => fileRef.current?.click()}><FiUpload /> Enviar fotos</Button>
             </div>
           }>
-            {v.images.length === 0 && <p className="mb-3 text-sm text-muted">Envie fotos JPG, PNG ou WEBP de até 5 MB. A primeira é a capa.</p>}
+            {v.images.length === 0 && <p className="mb-3 text-sm text-muted">Envie fotos JPG, PNG ou WEBP de até 3 MB. A primeira é a capa.</p>}
             <ul className="grid grid-cols-3 gap-3 sm:grid-cols-5">
               {v.images.map((img, i) => (
                 <li key={img.url + i} className="relative">
@@ -210,7 +210,7 @@ export function ProductForm({ id }) {
             </ul>
             <div className="mt-3 flex gap-2">
               <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Ou cole o endereço (URL) de uma imagem" className="h-10 flex-1 rounded-md border border-line px-3 text-sm focus:border-brand focus:outline-none" />
-              <Button variant="secondary" size="sm" className="h-10" disabled={!/^(https:\/\/|\/uploads\/)/.test(imageUrl)} onClick={() => { f.set('images', [...v.images, { url: imageUrl.trim(), alt: v.name }]); setImageUrl(''); }}>Adicionar</Button>
+              <Button variant="secondary" size="sm" className="h-10" disabled={!/^(https:\/\/|\/uploads\/|\/api\/media\/)/.test(imageUrl)} onClick={() => { f.set('images', [...v.images, { url: imageUrl.trim(), alt: v.name }]); setImageUrl(''); }}>Adicionar</Button>
             </div>
           </Card>
 

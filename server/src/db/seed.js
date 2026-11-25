@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { slugify } from '../lib/http.js';
@@ -91,9 +89,6 @@ let seedState = 42;
 const rand = () => ((seedState = (seedState * 1103515245 + 12345) % 2147483648) / 2147483648);
 
 async function seedCatalog() {
-  const imgDir = path.join(config.uploadDir, 'seed');
-  fs.mkdirSync(imgDir, { recursive: true });
-
   const catIds = {};
   for (const [name, slug, kind, order, desc] of CATEGORIES) {
     const c = await one(
@@ -107,7 +102,7 @@ async function seedCatalog() {
   const { n } = await one('SELECT count(*)::int AS n FROM products');
   if (n > 0) {
     console.log('[seed] catálogo já existe — produtos não foram recriados');
-    return;
+    return false;
   }
 
   for (const [idx, row] of PRODUCTS.entries()) {
@@ -130,10 +125,9 @@ async function seedCatalog() {
       ...(colors[1] ? [{ color: colors[1], zoom: false, alt: `${name} — ${colors[1]}` }] : []),
     ];
     for (const [i, img] of imgs.entries()) {
-      const file = `${slug}-${i + 1}.svg`;
-      const svg = garmentSvg(shape, COLORS[img.color], { bg: BGS[(idx + i) % BGS.length], zoom: img.zoom, id: `p${idx}i${i}` });
-      fs.writeFileSync(path.join(imgDir, file), svg);
-      await query('INSERT INTO product_images (product_id, url, alt, sort_order) VALUES ($1,$2,$3,$4)', [p.id, `/uploads/seed/${file}`, img.alt, i]);
+      const svg = Buffer.from(garmentSvg(shape, COLORS[img.color], { bg: BGS[(idx + i) % BGS.length], zoom: img.zoom, id: `p${idx}i${i}` }));
+      const media = await one(`INSERT INTO media (mime, data, size) VALUES ('image/svg+xml', $1, $2) RETURNING id`, [svg, svg.length]);
+      await query('INSERT INTO product_images (product_id, url, alt, sort_order) VALUES ($1,$2,$3,$4)', [p.id, `/api/media/${media.id}`, img.alt, i]);
     }
 
     for (const color of colors) {
@@ -148,6 +142,7 @@ async function seedCatalog() {
     }
   }
   console.log(`[seed] ${PRODUCTS.length} produtos criados com variações, estoque e imagens`);
+  return true;
 }
 
 async function seedAdmin() {
@@ -170,10 +165,12 @@ async function seedAdmin() {
   console.log(`[seed] administrador criado: ${config.admin.email}`);
 }
 
-async function seedRest() {
+async function seedRest(firstRun) {
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [key, JSON.stringify(value)]);
   }
+  // cupons de exemplo só na primeira execução (não recria cupons excluídos no painel)
+  if (!firstRun) return;
   await query(
     `INSERT INTO coupons (code, description, discount_type, value, min_order_cents) VALUES
        ('BEMVINDO10', '10% de desconto na primeira compra', 'percent', 10, 0),
@@ -186,12 +183,11 @@ async function main() {
   if (process.argv.includes('--reset')) {
     if (config.isProd) throw new Error('--reset não é permitido em produção.');
     await query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
-    fs.rmSync(path.join(config.uploadDir, 'seed'), { recursive: true, force: true });
     console.log('[seed] banco apagado');
   }
   await migrate();
-  await seedCatalog();
-  await seedRest();
+  const firstRun = await seedCatalog();
+  await seedRest(firstRun);
   await seedAdmin();
   console.log('[seed] concluído');
 }

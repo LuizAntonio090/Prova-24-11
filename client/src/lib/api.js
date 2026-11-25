@@ -39,7 +39,7 @@ api.del = (path) => api(path, { method: 'DELETE', body: {} });
 
 /** Envia uma imagem (JPG/PNG/WEBP) para o servidor e devolve a URL pública. */
 export async function uploadImage(file) {
-  if (file.size > 5 * 1024 * 1024) throw new ApiError('A imagem deve ter no máximo 5 MB.', 413);
+  if (file.size > 3 * 1024 * 1024) throw new ApiError('A imagem deve ter no máximo 3 MB.', 413);
   const data = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);

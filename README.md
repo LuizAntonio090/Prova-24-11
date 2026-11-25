@@ -61,7 +61,6 @@ Loja virtual completa de roupas, com vitrine, catálogo com filtros, carrinho, c
 │       ├── pages/             # Home, Catálogo, Produto, Carrinho, Checkout, Pedido, Conta…
 │       └── admin/             # Painel administrativo (carregado sob demanda)
 ├── server/                    # Back-end (Express)
-│   ├── uploads/               # imagens enviadas pelo painel e geradas pelo seed
 │   └── src/
 │       ├── index.js, app.js, config.js
 │       ├── db/                # pool, migrações SQL, seed
@@ -69,6 +68,8 @@ Loja virtual completa de roupas, com vitrine, catálogo com filtros, carrinho, c
 │       ├── middleware/        # sessão/permissões, cabeçalhos, CSRF, limite de tentativas
 │       ├── services/          # orçamento do carrinho, pedidos, Mercado Pago, catálogo
 │       └── routes/            # auth, catálogo, pedidos/pagamentos, conta, admin/*
+├── api/index.js               # entrada da função serverless na Vercel
+├── vercel.json                # build e rotas na Vercel
 ├── docker-compose.yml         # PostgreSQL local
 ├── .env.example
 └── package.json               # workspaces + scripts
@@ -76,7 +77,7 @@ Loja virtual completa de roupas, com vitrine, catálogo com filtros, carrinho, c
 
 ### Banco de dados
 
-Tabelas: `users`, `sessions`, `email_tokens`, `categories`, `products`, `product_categories`, `product_images`, `product_variants` (estoque por tamanho e cor), `addresses`, `favorites`, `coupons`, `orders`, `order_items`, `order_status_history`, `payments`, `settings` e `newsletter_subscribers`. Há também a visão `v_products`, com o preço efetivo considerando a promoção vigente e o estoque total. As chaves estrangeiras e as restrições (`CHECK`, `UNIQUE`) estão em `server/src/db/migrations/001_init.sql`.
+Tabelas: `users`, `sessions`, `email_tokens`, `categories`, `products`, `product_categories`, `product_images`, `product_variants` (estoque por tamanho e cor), `addresses`, `favorites`, `coupons`, `orders`, `order_items`, `order_status_history`, `payments`, `settings` e `newsletter_subscribers` e `media` (imagens). Há também a visão `v_products`, com o preço efetivo considerando a promoção vigente e o estoque total. As chaves estrangeiras e as restrições (`CHECK`, `UNIQUE`) estão em `server/src/db/migrations/001_init.sql`.
 
 ---
 
@@ -135,10 +136,37 @@ Em produção, o próprio Express entrega o front-end compilado e a API no mesmo
 - `ADMIN_PASSWORD` forte. O seed recusa criar o administrador em produção sem ela.
 - SMTP configurado (Resend, Brevo, Amazon SES, Mailgun…).
 - Credenciais de **produção** do Mercado Pago e `MP_WEBHOOK_SECRET`. Em produção, webhooks sem assinatura válida são recusados.
-- A pasta `server/uploads` em disco persistente (ou troque o upload por S3/Cloudinary em `routes/admin/products.js`).
 - Revise os textos das páginas institucionais (trocas, entregas, privacidade, termos) em `client/src/pages/Info.jsx`.
 
-Funciona em qualquer serviço que rode Node.js e PostgreSQL (Render, Railway, Fly.io, uma VPS com Nginx etc.).
+Funciona em qualquer serviço que rode Node.js e PostgreSQL (Render, Railway, Fly.io, uma VPS com Nginx etc.). Para a Vercel, veja a seção abaixo.
+
+## Publicar na Vercel
+
+O projeto já vem pronto para a Vercel:
+- `vercel.json` compila o front-end (`client/dist`) e envia `/api/*` para uma função serverless (`api/index.js`), que roda o mesmo app Express.
+- Em cada deploy, o build roda as migrações e o seed. O seed é seguro para rodar várias vezes: só cria o que falta e não apaga nada.
+- As imagens (as do seed e as enviadas pelo painel) ficam guardadas no banco e são servidas em `/api/media/:id`, porque a Vercel não tem disco permanente.
+- `APP_URL` e `PUBLIC_API_URL` usam o domínio do projeto na Vercel automaticamente, se você não definir.
+
+**Passo a passo**
+1. **Suba o código para o GitHub.** Crie um repositório e envie a pasta do projeto (pelo GitHub Desktop ou por `git push`). O `.env` fica de fora pelo `.gitignore`. Nunca envie o seu.
+2. **Importe na Vercel.** Em vercel.com, clique em *Add New → Project* e escolha o repositório. Deixe o *Framework Preset* como **Other** e a *Root Directory* como está (raiz). Antes de clicar em *Deploy*, abra *Environment Variables* e crie:
+   - `ADMIN_EMAIL`: seu e-mail de administrador
+   - `ADMIN_PASSWORD`: uma senha forte (sem ela o build falha de propósito)
+   - `DATABASE_SSL`: `true`
+
+   O primeiro deploy **vai falhar** por ainda não haver banco. Isso é esperado.
+3. **Crie o banco.** No projeto, abra a aba *Storage* e escolha *Create Database → Neon (Postgres)*. O plano gratuito serve. Conecte o banco ao projeto: a Vercel cria a variável `DATABASE_URL` sozinha.
+4. **Configure o e-mail (obrigatório para vender).** Os clientes precisam confirmar o e-mail para finalizar compras, e em produção o link não aparece na tela. Uma opção gratuita é o Brevo (300 e-mails/dia): crie a conta, valide o remetente e use `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, `SMTP_USER` (seu login SMTP no Brevo), `SMTP_PASS` (a chave SMTP) e `MAIL_FROM="Sua Loja <seu@email.com>"`.
+5. **Pagamentos (opcional para começar).** Adicione `MP_ACCESS_TOKEN` (credencial `TEST-` para testar). Para a confirmação automática, cadastre no Mercado Pago o webhook `https://SEU-PROJETO.vercel.app/api/payments/webhook/mercadopago` e adicione `MP_WEBHOOK_SECRET`.
+6. **Publique de novo.** Em *Deployments*, abra o último deploy, clique em *⋯ → Redeploy* e confirme. Quando terminar, a loja estará em `https://SEU-PROJETO.vercel.app` e o painel em `/admin`.
+
+Toda vez que você enviar alterações para o GitHub, a Vercel publica sozinha. Sempre que mudar uma variável de ambiente, faça *Redeploy*.
+
+**Limitações na Vercel**
+- O limite de tentativas de login fica na memória de cada instância da função, então protege menos do que num servidor único. Para reforçar, use um armazenamento compartilhado (ex.: Upstash Redis) em `middleware/security.js`.
+- As requisições têm limite de 4,5 MB, por isso cada foto enviada pelo painel pode ter no máximo 3 MB.
+- A primeira requisição depois de um tempo parado pode demorar 1 a 2 segundos (*cold start*).
 
 ---
 
@@ -175,7 +203,7 @@ O formulário de endereço consulta o **ViaCEP** direto do navegador, um serviç
 - **Limite de tentativas** em login, cadastro e envio de e-mails.
 - As rotas `/api/admin/*` exigem papel de administrador no servidor, não só na interface.
 - Validação de todas as entradas com Zod e consultas sempre parametrizadas.
-- Upload de imagens restrito a JPG, PNG e WEBP, conferido pela assinatura do arquivo (não pela extensão), com limite de 5 MB.
+- Upload de imagens restrito a JPG, PNG e WEBP, conferido pela assinatura do arquivo (não pela extensão), com limite de 3 MB. As imagens ficam no banco.
 - Cabeçalhos de segurança (CSP, HSTS, X-Frame-Options e outros) em produção.
 - O estoque é reservado com travas de linha na criação do pedido, o que impede vender a mesma última unidade duas vezes.
 - A recuperação de senha não revela se o e-mail tem cadastro. Os links expiram e só podem ser usados uma vez.
@@ -202,7 +230,7 @@ Os 30 produtos de exemplo usam **ilustrações vetoriais geradas pelo seed** (si
 
 ## Próximos passos sugeridos
 - Integração de frete em tempo real (Melhor Envio).
-- Upload de imagens para S3 ou Cloudinary.
+- Imagens num CDN (Vercel Blob, S3 ou Cloudinary) quando o catálogo crescer.
 - Avaliações de produtos.
 - Pagamento com cartão transparente (Checkout API, com o formulário de cartão do Mercado Pago dentro da loja).
 - Testes automatizados (Vitest e Playwright) no CI.

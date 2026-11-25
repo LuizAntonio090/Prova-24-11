@@ -21,8 +21,10 @@ export function createApp() {
   app.use(cookies);
 
   // imagens enviadas pelo painel e imagens geradas pelo seed
-  fs.mkdirSync(config.uploadDir, { recursive: true });
-  app.use('/uploads', express.static(config.uploadDir, { maxAge: 7 * 24 * 3600 * 1000 }));
+  // (em hospedagens sem disco gravável, como a Vercel, as imagens ficam no banco: /api/media/:id)
+  if (fs.existsSync(config.uploadDir)) {
+    app.use('/uploads', express.static(config.uploadDir, { maxAge: 7 * 24 * 3600 * 1000 }));
+  }
 
   const api = express.Router();
   api.use(express.json({ limit: '200kb' }));
